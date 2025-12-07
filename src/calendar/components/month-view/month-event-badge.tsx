@@ -1,5 +1,6 @@
 import { cva } from "class-variance-authority";
 import { endOfDay, format, isSameDay, parseISO, startOfDay } from "date-fns";
+import { Bot } from "lucide-react";
 
 import { useCalendar } from "@/calendar/contexts/calendar-context";
 
@@ -8,8 +9,17 @@ import { EventDetailsDialog } from "@/calendar/components/dialogs/event-details-
 
 import { cn } from "@/lib/utils";
 
-import type { IEvent } from "@/calendar/interfaces";
+import type { IEvent, TPhantomStatus } from "@/calendar/interfaces";
 import type { VariantProps } from "class-variance-authority";
+
+/**
+ * Styles for phantom events (pending agent changes)
+ */
+const phantomStyles: Record<TPhantomStatus, string> = {
+  added: "border-dashed border-2 border-green-500 bg-green-50/50 dark:bg-green-950/30 opacity-80",
+  modified: "border-dashed border-2 border-amber-500 bg-amber-50/50 dark:bg-amber-950/30 opacity-80",
+  removed: "border-dashed border-2 border-red-500 bg-red-50/50 dark:bg-red-950/30 opacity-50 line-through",
+};
 
 const eventBadgeVariants = cva(
   "mx-1 flex size-auto h-6.5 select-none items-center justify-between gap-1.5 truncate whitespace-nowrap rounded-md border px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -84,7 +94,13 @@ export function MonthEventBadge({ event, cellDate, eventCurrentDay, eventTotalDa
 
   const color = (badgeVariant === "dot" ? `${event.color}-dot` : event.color) as VariantProps<typeof eventBadgeVariants>["color"];
 
-  const eventBadgeClasses = cn(eventBadgeVariants({ color, multiDayPosition: position, className }));
+  // Apply phantom styles if this is a pending agent change
+  const phantomClass = event._phantom ? phantomStyles[event._phantom] : "";
+
+  const eventBadgeClasses = cn(
+    eventBadgeVariants({ color, multiDayPosition: position, className }),
+    phantomClass
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -93,32 +109,44 @@ export function MonthEventBadge({ event, cellDate, eventCurrentDay, eventTotalDa
     }
   };
 
+  const content = (
+    <div role="button" tabIndex={0} className={eventBadgeClasses} onKeyDown={handleKeyDown}>
+      <div className="flex items-center gap-1.5 truncate">
+        {/* Show bot icon for phantom events */}
+        {event._phantom && !["middle", "last"].includes(position) && (
+          <Bot className="size-3 shrink-0 text-purple-600 dark:text-purple-400" />
+        )}
+
+        {!event._phantom && !["middle", "last"].includes(position) && ["mixed", "dot"].includes(badgeVariant) && (
+          <svg width="8" height="8" viewBox="0 0 8 8" className="event-dot shrink-0">
+            <circle cx="4" cy="4" r="4" />
+          </svg>
+        )}
+
+        {renderBadgeText && (
+          <p className="flex-1 truncate font-semibold">
+            {eventCurrentDay && (
+              <span className="text-xs">
+                Day {eventCurrentDay} of {eventTotalDays} •{" "}
+              </span>
+            )}
+            {event.title}
+          </p>
+        )}
+      </div>
+
+      {renderBadgeText && <span>{format(new Date(event.startDate), "h:mm a")}</span>}
+    </div>
+  );
+
+  // Don't allow dragging phantom events
+  if (event._phantom) {
+    return <EventDetailsDialog event={event}>{content}</EventDetailsDialog>;
+  }
+
   return (
     <DraggableEvent event={event}>
-      <EventDetailsDialog event={event}>
-        <div role="button" tabIndex={0} className={eventBadgeClasses} onKeyDown={handleKeyDown}>
-          <div className="flex items-center gap-1.5 truncate">
-            {!["middle", "last"].includes(position) && ["mixed", "dot"].includes(badgeVariant) && (
-              <svg width="8" height="8" viewBox="0 0 8 8" className="event-dot shrink-0">
-                <circle cx="4" cy="4" r="4" />
-              </svg>
-            )}
-
-            {renderBadgeText && (
-              <p className="flex-1 truncate font-semibold">
-                {eventCurrentDay && (
-                  <span className="text-xs">
-                    Day {eventCurrentDay} of {eventTotalDays} •{" "}
-                  </span>
-                )}
-                {event.title}
-              </p>
-            )}
-          </div>
-
-          {renderBadgeText && <span>{format(new Date(event.startDate), "h:mm a")}</span>}
-        </div>
-      </EventDetailsDialog>
+      <EventDetailsDialog event={event}>{content}</EventDetailsDialog>
     </DraggableEvent>
   );
 }

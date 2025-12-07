@@ -25,125 +25,89 @@ export function useSettingsTools() {
     setWorkingHours,
   } = useCalendar();
 
-  // Tool: Get display settings
+  // Consolidated settings tool - update one or more settings at once
   useWebMCP({
-    name: "calendar_get_settings",
-    description:
-      "Get current calendar display settings including badge variant, visible hours, and working hours",
-    inputSchema: {},
-    annotations: {
-      readOnlyHint: true,
-      idempotentHint: true,
-      destructiveHint: false,
-    },
-    handler: async () => {
-      return {
-        badgeVariant,
-        visibleHours,
-        workingHours,
-      };
-    },
-  });
+    name: "calendar_update_settings",
+    description: `Update calendar display settings. All parameters are optional - only provide what you want to change.
 
-  // Tool: Change badge variant
-  useWebMCP({
-    name: "calendar_set_badge_variant",
-    description:
-      "Change how event badges are displayed in the calendar (dot, colored, or mixed)",
+Settings you can modify:
+- badgeVariant: How events appear ('dot', 'colored', 'mixed')
+- visibleHours: Time range shown in day/week views
+- workingHours: Working hours for a specific day (affects visual styling)`,
     inputSchema: {
-      variant: z
+      badgeVariant: z
         .enum(["dot", "colored", "mixed"])
-        .describe(
-          "Badge display style: 'dot' shows small dots, 'colored' shows full colored badges, 'mixed' combines both"
-        ),
+        .optional()
+        .describe("Badge display style: 'dot' shows small dots, 'colored' shows full colored badges, 'mixed' combines both"),
+      visibleHours: z
+        .object({
+          from: z.coerce.number().min(0).max(23).describe("Start hour (0-23)"),
+          to: z.coerce.number().min(1).max(24).describe("End hour (1-24)"),
+        })
+        .optional()
+        .describe("Time range visible in day/week views"),
+      workingHours: z
+        .object({
+          dayOfWeek: z.coerce.number().min(0).max(6).describe("Day of week (0=Sunday, 6=Saturday)"),
+          from: z.coerce.number().min(0).max(23).describe("Work start hour (0-23), or 0 if not a working day"),
+          to: z.coerce.number().min(0).max(24).describe("Work end hour (0-24), or 0 if not a working day"),
+        })
+        .optional()
+        .describe("Set working hours for a specific day"),
     },
     annotations: {
       readOnlyHint: false,
       idempotentHint: true,
       destructiveHint: false,
     },
-    handler: async ({ variant }) => {
-      setBadgeVariant(variant as TBadgeVariant);
-      return {
-        success: true,
-        message: `Badge variant changed to "${variant}"`,
-        currentVariant: variant,
-      };
-    },
-  });
+    handler: async ({ badgeVariant: newBadgeVariant, visibleHours: newVisibleHours, workingHours: newWorkingHours }) => {
+      const changes: string[] = [];
 
-  // Tool: Set visible hours
-  useWebMCP({
-    name: "calendar_set_visible_hours",
-    description: "Set the range of hours visible in day and week views",
-    inputSchema: {
-      from: z.number().min(0).max(23).describe("Start hour (0-23)"),
-      to: z.number().min(1).max(24).describe("End hour (1-24)"),
-    },
-    annotations: {
-      readOnlyHint: false,
-      idempotentHint: true,
-      destructiveHint: false,
-    },
-    handler: async ({ from, to }) => {
-      if (from >= to) {
-        throw new Error("Start hour must be before end hour");
+      // Update badge variant
+      if (newBadgeVariant) {
+        setBadgeVariant(newBadgeVariant as TBadgeVariant);
+        changes.push(`Badge variant set to "${newBadgeVariant}"`);
       }
 
-      const newVisibleHours: TVisibleHours = { from, to };
-      setVisibleHours(newVisibleHours);
+      // Update visible hours
+      if (newVisibleHours) {
+        if (newVisibleHours.from >= newVisibleHours.to) {
+          throw new Error("Start hour must be before end hour");
+        }
+        setVisibleHours(newVisibleHours as TVisibleHours);
+        changes.push(`Visible hours set to ${newVisibleHours.from}:00 - ${newVisibleHours.to}:00`);
+      }
+
+      // Update working hours for a specific day
+      if (newWorkingHours) {
+        const { dayOfWeek, from, to } = newWorkingHours;
+        setWorkingHours((prev) => ({
+          ...prev,
+          [dayOfWeek]: { from, to },
+        }));
+        const isWorkingDay = from > 0 || to > 0;
+        changes.push(
+          isWorkingDay
+            ? `${DAY_NAMES[dayOfWeek]} working hours set to ${from}:00 - ${to}:00`
+            : `${DAY_NAMES[dayOfWeek]} marked as non-working day`
+        );
+      }
+
+      if (changes.length === 0) {
+        return {
+          success: false,
+          message: "No settings were changed. Provide at least one setting to update.",
+        };
+      }
 
       return {
         success: true,
-        message: `Visible hours set to ${from}:00 - ${to}:00`,
-        visibleHours: newVisibleHours,
-      };
-    },
-  });
-
-  // Tool: Set working hours for a day
-  useWebMCP({
-    name: "calendar_set_working_hours",
-    description:
-      "Set working hours for a specific day of the week (affects visual styling in week/day views)",
-    inputSchema: {
-      dayOfWeek: z
-        .number()
-        .min(0)
-        .max(6)
-        .describe("Day of week (0=Sunday, 1=Monday, ..., 6=Saturday)"),
-      from: z
-        .number()
-        .min(0)
-        .max(23)
-        .describe("Work start hour (0-23), or 0 if not a working day"),
-      to: z
-        .number()
-        .min(0)
-        .max(24)
-        .describe("Work end hour (0-24), or 0 if not a working day"),
-    },
-    annotations: {
-      readOnlyHint: false,
-      idempotentHint: true,
-      destructiveHint: false,
-    },
-    handler: async ({ dayOfWeek, from, to }) => {
-      setWorkingHours((prev) => ({
-        ...prev,
-        [dayOfWeek]: { from, to },
-      }));
-
-      const isWorkingDay = from > 0 || to > 0;
-
-      return {
-        success: true,
-        message: isWorkingDay
-          ? `Working hours for ${DAY_NAMES[dayOfWeek]} set to ${from}:00 - ${to}:00`
-          : `${DAY_NAMES[dayOfWeek]} marked as non-working day`,
-        dayOfWeek,
-        dayName: DAY_NAMES[dayOfWeek],
-        workingHours: { from, to },
+        message: changes.join(". "),
+        currentSettings: {
+          badgeVariant: newBadgeVariant || badgeVariant,
+          visibleHours: newVisibleHours || visibleHours,
+          workingHours,
+        },
       };
     },
   });

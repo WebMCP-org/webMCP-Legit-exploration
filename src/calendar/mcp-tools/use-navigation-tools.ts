@@ -19,98 +19,79 @@ export function useNavigationTools() {
   const pathname = usePathname();
   const { selectedDate, setSelectedDate } = useCalendar();
 
-  // Tool: Switch calendar view
+  // Consolidated navigation tool
   useWebMCP({
-    name: "calendar_switch_view",
-    description:
-      "Switch to a different calendar view (day, week, month, year, or agenda)",
+    name: "calendar_navigate",
+    description: `Navigate the calendar to a specific view, date, or today. Can combine view and date in one call.
+
+View-specific tools become available when you navigate:
+- Day view: Tools for hourly breakdown, day summary, finding conflicts
+- Year view: Tools for yearly summaries, month comparisons, finding busy/quiet periods
+
+Examples:
+- Show today in week view: { "view": "week", "today": true }
+- Go to specific date: { "date": "2025-12-25" }
+- Switch to year view: { "view": "year" }`,
     inputSchema: {
       view: z
         .enum(["day", "week", "month", "year", "agenda"])
-        .describe("The calendar view to switch to"),
-    },
-    annotations: {
-      readOnlyHint: false,
-      idempotentHint: true,
-      destructiveHint: false,
-    },
-    handler: async ({ view }) => {
-      router.push(VIEW_ROUTES[view as TCalendarView]);
-
-      return {
-        success: true,
-        message: `Switched to ${view} view`,
-        currentView: view,
-      };
-    },
-  });
-
-  // Tool: Get current view
-  useWebMCP({
-    name: "calendar_get_current_view",
-    description: "Get the current calendar view being displayed",
-    inputSchema: {},
-    annotations: {
-      readOnlyHint: true,
-      idempotentHint: true,
-      destructiveHint: false,
-    },
-    handler: async () => {
-      const viewFromPath =
-        pathname?.replace("-view", "").replace("/", "") || "month";
-      return {
-        currentView: viewFromPath,
-        selectedDate: selectedDate.toISOString(),
-      };
-    },
-  });
-
-  // Tool: Navigate to specific date
-  useWebMCP({
-    name: "calendar_navigate_to_date",
-    description: "Navigate the calendar to a specific date",
-    inputSchema: {
+        .optional()
+        .describe("Calendar view to switch to"),
       date: z
         .string()
-        .describe("ISO date string or natural date like '2025-01-15'"),
+        .optional()
+        .describe("Date to navigate to (YYYY-MM-DD format, e.g., '2025-12-08')"),
+      today: z.coerce
+        .boolean()
+        .optional()
+        .describe("Set to true to navigate to today's date"),
     },
     annotations: {
       readOnlyHint: false,
       idempotentHint: true,
       destructiveHint: false,
     },
-    handler: async ({ date }) => {
-      const parsedDate = new Date(date);
-      if (isNaN(parsedDate.getTime())) {
-        throw new Error("Invalid date format");
-      }
-      setSelectedDate(parsedDate);
-      return {
-        success: true,
-        message: `Navigated to ${parsedDate.toDateString()}`,
-        selectedDate: parsedDate.toISOString(),
-      };
-    },
-  });
+    handler: async ({ view, date, today }) => {
+      let targetDate = selectedDate;
 
-  // Tool: Navigate to today
-  useWebMCP({
-    name: "calendar_go_to_today",
-    description: "Navigate the calendar to today's date",
-    inputSchema: {},
-    annotations: {
-      readOnlyHint: false,
-      idempotentHint: true,
-      destructiveHint: false,
-    },
-    handler: async () => {
-      const today = new Date();
-      setSelectedDate(today);
+      // Handle date navigation
+      if (today) {
+        targetDate = new Date();
+        setSelectedDate(targetDate);
+      } else if (date) {
+        const parsedDate = new Date(date);
+        if (isNaN(parsedDate.getTime())) {
+          throw new Error(`Invalid date format: "${date}". Use YYYY-MM-DD format.`);
+        }
+        targetDate = parsedDate;
+        setSelectedDate(targetDate);
+      }
+
+      // Handle view navigation
+      if (view) {
+        router.push(VIEW_ROUTES[view]);
+      }
+
+      const currentView = view || pathname?.replace("-view", "").replace("/", "") || "month";
+
       return {
         success: true,
-        message: "Navigated to today",
-        selectedDate: today.toISOString(),
+        message: `Navigated to ${targetDate.toDateString()}${view ? ` in ${view} view` : ""}`,
+        currentView,
+        selectedDate: targetDate.toISOString(),
+        availableTools: getViewSpecificToolsHint(currentView as TCalendarView),
       };
     },
   });
+}
+
+function getViewSpecificToolsHint(view: TCalendarView): string {
+  switch (view) {
+    case "day":
+      return "Day view tools now available: hourly breakdown, day summary, find conflicts, navigate between days";
+    case "year":
+      return "Year view tools now available: yearly summary, compare months, find busiest/quietest periods, jump to month";
+    default:
+      return "Standard calendar tools available";
+  }
 }

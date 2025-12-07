@@ -1,16 +1,26 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useWebMCP } from "@mcp-b/react-webmcp";
 import { z } from "zod";
 import { useCalendar } from "@/calendar/contexts/calendar-context";
 
 export function useFilterTools() {
-  const { users, selectedUserId, setSelectedUserId } = useCalendar();
+  const pathname = usePathname();
+  const {
+    users,
+    selectedUserId,
+    setSelectedUserId,
+    selectedDate,
+    badgeVariant,
+    visibleHours,
+    workingHours,
+  } = useCalendar();
 
-  // Tool: List available users
+  // Consolidated state getter - combines get_current_view, get_settings, get_current_filter, list_users
   useWebMCP({
-    name: "calendar_list_users",
-    description: "List all users available for filtering events",
+    name: "calendar_get_state",
+    description: `Get the current calendar state including view, date, filter, settings, and available users. Use this to understand the current context before making changes.`,
     inputSchema: {},
     annotations: {
       readOnlyHint: true,
@@ -18,27 +28,49 @@ export function useFilterTools() {
       destructiveHint: false,
     },
     handler: async () => {
+      const currentView = pathname?.replace("-view", "").replace("/", "") || "month";
+      const currentUser =
+        selectedUserId === "all"
+          ? null
+          : users.find((u) => u.id === selectedUserId);
+
       return {
+        // Current view and date
+        currentView,
+        selectedDate: selectedDate.toISOString(),
+
+        // User filter
+        filter: {
+          userId: selectedUserId,
+          userName: currentUser?.name || "All Users",
+          isFiltered: selectedUserId !== "all",
+        },
+
+        // Display settings
+        settings: {
+          badgeVariant,
+          visibleHours,
+          workingHours,
+        },
+
+        // Available users (for filtering/event assignment)
         users: users.map((u) => ({
           id: u.id,
           name: u.name,
-          hasPicture: !!u.picturePath,
         })),
-        count: users.length,
-        currentFilter: selectedUserId,
       };
     },
   });
 
-  // Tool: Filter events by user
+  // Tool: Filter events by user (keep as separate since it's a common action)
   useWebMCP({
     name: "calendar_filter_by_user",
     description:
-      "Filter calendar events to show only events for a specific user, or show all users",
+      "Filter calendar events to show only events for a specific user, or 'all' to show everyone. The view updates immediately to reflect the filter.",
     inputSchema: {
       userId: z
         .string()
-        .describe("User ID to filter by, or 'all' to show all users"),
+        .describe("User ID to filter by, or 'all' to show all users. Get user IDs from calendar_get_state."),
     },
     annotations: {
       readOnlyHint: false,
@@ -50,44 +82,21 @@ export function useFilterTools() {
         const user = users.find((u) => u.id === userId);
         if (!user) {
           throw new Error(
-            `User with ID ${userId} not found. Available users: ${users.map((u) => `${u.name} (${u.id})`).join(", ")}`
+            `User with ID "${userId}" not found. Use calendar_get_state to see available users.`
           );
         }
       }
 
       setSelectedUserId(userId);
 
+      const userName = userId === "all"
+        ? "all users"
+        : users.find((u) => u.id === userId)?.name;
+
       return {
         success: true,
-        message:
-          userId === "all"
-            ? "Now showing events for all users"
-            : `Now filtering events for user ${users.find((u) => u.id === userId)?.name}`,
+        message: `Now showing events for ${userName}`,
         currentFilter: userId,
-      };
-    },
-  });
-
-  // Tool: Get current filter
-  useWebMCP({
-    name: "calendar_get_current_filter",
-    description: "Get the current user filter being applied to the calendar",
-    inputSchema: {},
-    annotations: {
-      readOnlyHint: true,
-      idempotentHint: true,
-      destructiveHint: false,
-    },
-    handler: async () => {
-      const currentUser =
-        selectedUserId === "all"
-          ? null
-          : users.find((u) => u.id === selectedUserId);
-
-      return {
-        currentFilter: selectedUserId,
-        currentUserName: currentUser?.name || "All Users",
-        isFilteringByUser: selectedUserId !== "all",
       };
     },
   });
