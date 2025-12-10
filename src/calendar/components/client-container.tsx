@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { isSameDay, parseISO } from "date-fns";
 
 import { useCalendar } from "@/calendar/contexts/calendar-context";
+import { useCombinedEvents } from "@/calendar/hooks/use-combined-events";
 
 import { DndProviderWrapper } from "@/calendar/components/dnd/dnd-provider";
 
@@ -21,7 +22,9 @@ interface IProps {
 }
 
 export function ClientContainer({ view }: IProps) {
-  const { selectedDate, selectedUserId, events } = useCalendar();
+  const { selectedDate, selectedUserId } = useCalendar();
+  // Use combined events to include phantom events from agent preview
+  const events = useCombinedEvents();
 
   const filteredEvents = useMemo(() => {
     return events.filter(event => {

@@ -1,5 +1,6 @@
 import { cva } from "class-variance-authority";
 import { format, differenceInMinutes, parseISO } from "date-fns";
+import { Bot } from "lucide-react";
 
 import { useCalendar } from "@/calendar/contexts/calendar-context";
 
@@ -9,7 +10,7 @@ import { EventDetailsDialog } from "@/calendar/components/dialogs/event-details-
 import { cn } from "@/lib/utils";
 
 import type { HTMLAttributes } from "react";
-import type { IEvent } from "@/calendar/interfaces";
+import type { IEvent, TPhantomStatus } from "@/calendar/interfaces";
 import type { VariantProps } from "class-variance-authority";
 
 const calendarWeekEventCardVariants = cva(
@@ -42,6 +43,16 @@ const calendarWeekEventCardVariants = cva(
   }
 );
 
+/**
+ * Styles for phantom events (pending agent changes)
+ * Uses CSS animations defined in globals.css for pulsing glow effect
+ */
+const phantomStyles: Record<TPhantomStatus, string> = {
+  added: "border-dashed border-2 border-green-500 bg-green-50/50 dark:bg-green-950/30 phantom-added",
+  modified: "border-dashed border-2 border-amber-500 bg-amber-50/50 dark:bg-amber-950/30 phantom-modified",
+  removed: "border-dashed border-2 border-red-500 bg-red-50/50 dark:bg-red-950/30 opacity-50 line-through phantom-removed",
+};
+
 interface IProps extends HTMLAttributes<HTMLDivElement>, Omit<VariantProps<typeof calendarWeekEventCardVariants>, "color"> {
   event: IEvent;
 }
@@ -56,7 +67,14 @@ export function EventBlock({ event, className }: IProps) {
 
   const color = (badgeVariant === "dot" ? `${event.color}-dot` : event.color) as VariantProps<typeof calendarWeekEventCardVariants>["color"];
 
-  const calendarWeekEventCardClasses = cn(calendarWeekEventCardVariants({ color, className }), durationInMinutes < 35 && "py-0 justify-center");
+  // Apply phantom styles if this is a pending agent change
+  const phantomClass = event._phantom ? phantomStyles[event._phantom] : "";
+
+  const calendarWeekEventCardClasses = cn(
+    calendarWeekEventCardVariants({ color, className }),
+    durationInMinutes < 35 && "py-0 justify-center",
+    phantomClass
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -65,27 +83,49 @@ export function EventBlock({ event, className }: IProps) {
     }
   };
 
+  // For phantom events, wrap differently (no drag, show indicator)
+  const content = (
+    <div role="button" tabIndex={0} className={calendarWeekEventCardClasses} style={{ height: `${heightInPixels}px` }} onKeyDown={handleKeyDown}>
+      <div className="flex items-center gap-1.5 truncate">
+        {/* Show bot icon for phantom events */}
+        {event._phantom && (
+          <Bot className="size-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+        )}
+
+        {["mixed", "dot"].includes(badgeVariant) && !event._phantom && (
+          <svg width="8" height="8" viewBox="0 0 8 8" className="event-dot shrink-0">
+            <circle cx="4" cy="4" r="4" />
+          </svg>
+        )}
+
+        <p className="truncate font-semibold">{event.title}</p>
+      </div>
+
+      {durationInMinutes > 25 && (
+        <p>
+          {format(start, "h:mm a")} - {format(end, "h:mm a")}
+        </p>
+      )}
+
+      {/* Phantom status badge */}
+      {event._phantom && durationInMinutes > 40 && (
+        <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-70">
+          {event._phantom === "added" && "AI Proposed"}
+          {event._phantom === "modified" && "AI Modified"}
+          {event._phantom === "removed" && "AI Removed"}
+        </span>
+      )}
+    </div>
+  );
+
+  // Don't allow dragging phantom events
+  if (event._phantom) {
+    return <EventDetailsDialog event={event}>{content}</EventDetailsDialog>;
+  }
+
   return (
     <DraggableEvent event={event}>
-      <EventDetailsDialog event={event}>
-        <div role="button" tabIndex={0} className={calendarWeekEventCardClasses} style={{ height: `${heightInPixels}px` }} onKeyDown={handleKeyDown}>
-          <div className="flex items-center gap-1.5 truncate">
-            {["mixed", "dot"].includes(badgeVariant) && (
-              <svg width="8" height="8" viewBox="0 0 8 8" className="event-dot shrink-0">
-                <circle cx="4" cy="4" r="4" />
-              </svg>
-            )}
-
-            <p className="truncate font-semibold">{event.title}</p>
-          </div>
-
-          {durationInMinutes > 25 && (
-            <p>
-              {format(start, "h:mm a")} - {format(end, "h:mm a")}
-            </p>
-          )}
-        </div>
-      </EventDetailsDialog>
+      <EventDetailsDialog event={event}>{content}</EventDetailsDialog>
     </DraggableEvent>
   );
 }
