@@ -4,6 +4,8 @@ A demonstration of **WebMCP** (Model Context Protocol for the web) integrated wi
 
 This project showcases how AI agents can safely make changes to application state using isolated sandbox branches, visual previews, and a commit-based workflow.
 
+📺 Check out the [Loom](https://www.loom.com/share/c0e34ef13fa940b4a1c7464ef1405398) to see the features in action
+
 ## Features
 
 - **Multi-Agent Sandboxing**: Each AI agent works in an isolated Git branch
