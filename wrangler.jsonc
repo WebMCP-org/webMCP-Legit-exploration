@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "legit-webmcp",
+  "compatibility_date": "2025-12-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": ".open-next/worker.js",
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "routes": [
+    {
+      "pattern": "letgitwebmcp.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.letgitwebmcp.com",
+      "custom_domain": true
+    }
+  ]
+}
