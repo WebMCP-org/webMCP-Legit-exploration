@@ -1,470 +1,444 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
   Bot,
-  Users,
-  Zap,
   RotateCcw,
-  GitBranch,
-  GitMerge,
-  Eye,
   Play,
   CheckCircle2,
-  Info,
+  Sparkles,
+  X,
+  ChevronRight,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useMultiAgentCoordination } from "@/legit-webmcp";
 import { useCalendar } from "@/calendar/contexts/calendar-context";
-import { useActivityFeed } from "@/calendar/contexts/activity-feed-context";
 import { useAgentPreview } from "@/calendar/contexts/agent-preview-context";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { IEvent } from "@/calendar/interfaces";
 import { addDays, setHours, setMinutes } from "date-fns";
 
+export interface DemoControlsRef {
+  openAndRunDemo: () => void;
+}
+
+// Step configuration with icons and descriptions
+interface StepConfig {
+  icon: React.ElementType;
+  iconColor: string;
+  title: string;
+  description: string;
+}
+
+const DEMO_STEPS: StepConfig[] = [
+  {
+    icon: Bot,
+    iconColor: "text-primary",
+    title: "AI analyzing calendar",
+    description: "Scanning your schedule for conflicts...",
+  },
+  {
+    icon: Plus,
+    iconColor: "text-green-500",
+    title: "Adding new meetings",
+    description: "AI suggests a new meeting",
+  },
+  {
+    icon: Pencil,
+    iconColor: "text-amber-500",
+    title: "Rescheduling conflicts",
+    description: "AI adjusts an existing event",
+  },
+  {
+    icon: Trash2,
+    iconColor: "text-red-500",
+    title: "Removing cancelled event",
+    description: "AI proposes removing a meeting",
+  },
+  {
+    icon: CheckCircle2,
+    iconColor: "text-primary",
+    title: "Ready for your review!",
+    description: "You decide what to keep or discard",
+  },
+];
+
 /**
- * Enhanced Demo Control Panel
- * Showcases the Legit SDK + WebMCP integration with guided demos
+ * Demo Control Panel
+ * Showcases AI calendar scheduling with conflicts and user approval
  */
-export function DemoControls() {
+export const DemoControls = forwardRef<DemoControlsRef>(function DemoControls(_, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState<number | null>(null);
+  const [showPulse, setShowPulse] = useState(true);
+  const [actionLog, setActionLog] = useState<string[]>([]);
 
   const {
     createAgentSession,
-    activeSessions,
-    switchToMain,
-    defaultBranch,
   } = useMultiAgentCoordination();
-  const { setLocalEvents, users, selectedDate } = useCalendar();
-  const { addActivity } = useActivityFeed();
+  const { events, setLocalEvents, users, selectedDate } = useCalendar();
   const { startPreview, isPreviewMode } = useAgentPreview();
 
-  // Create a demo event for an agent
-  const createDemoEvent = (
+  // Stop pulsing after 10 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => setShowPulse(false), 10000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Create a demo event
+  const createDemoEvent = useCallback((
     title: string,
     dayOffset: number,
     hour: number,
+    minute: number,
     durationMinutes: number,
-    color: string
+    color: string,
+    description: string = "AI-scheduled meeting"
   ): IEvent => {
     const startDate = setMinutes(
       setHours(addDays(selectedDate, dayOffset), hour),
-      0
+      minute
     );
     const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
 
     return {
       id: Date.now() + Math.random() * 1000,
       title,
-      description: "AI-scheduled meeting",
+      description,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       color: color as IEvent["color"],
       user: users[0] || { id: "1", name: "User", picturePath: null },
     };
-  };
+  }, [selectedDate, users]);
 
-  // Demo: Single Agent Sandbox Workflow
-  const runSandboxDemo = async () => {
+  // Add to action log with animation delay
+  const logAction = useCallback((message: string) => {
+    setActionLog(prev => [...prev, message]);
+  }, []);
+
+  // Demo: AI schedules meetings, modifies conflicts, and removes events
+  const runSandboxDemo = useCallback(async () => {
     setIsRunning(true);
     setCurrentStep(1);
+    setShowPulse(false);
+    setActionLog([]);
 
     try {
-      addActivity({
-        type: "branch_created",
-        agentName: "Claude Scheduler",
-        description: "Creating isolated sandbox for AI agent...",
-      });
-
-      // Step 1: Create agent sandbox
+      // Step 1: AI starts analyzing
       await createAgentSession("scheduler-demo", "claude");
+      logAction("🤖 Connected to AI scheduler");
+      logAction("📅 Scanning your calendar...");
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // Get existing events to modify/delete
+      const existingEvents = [...events];
+      const eventToModify = existingEvents[0]; // First event to reschedule
+      const eventToDelete = existingEvents.length > 1 ? existingEvents[1] : null; // Second event to remove
+
+      // Step 2: Add new meeting
+      setCurrentStep(2);
+      const newEvent = createDemoEvent("Team Standup", 0, 9, 0, 30, "blue", "Daily sync with the team");
+      logAction(`➕ Adding: Team Standup (Today 9:00 AM)`);
       await new Promise((r) => setTimeout(r, 800));
 
-      setCurrentStep(2);
-      addActivity({
-        type: "event_created",
-        agentName: "scheduler-demo",
-        description: "Agent is scheduling events in its sandbox...",
-        status: "pending",
-      });
-
-      // Step 2: Add events
-      await new Promise((r) => setTimeout(r, 600));
-      const events = [
-        createDemoEvent("Team Standup", 1, 9, 30, "blue"),
-        createDemoEvent("Sprint Planning", 2, 10, 60, "green"),
-        createDemoEvent("Code Review", 3, 14, 45, "purple"),
-      ];
-      setLocalEvents((prev) => [...prev, ...events]);
-
+      // Step 3: Modify existing event (reschedule)
       setCurrentStep(3);
-      addActivity({
-        type: "event_created",
-        agentName: "scheduler-demo",
-        description: `Created ${events.length} meetings in sandbox`,
-        status: "success",
-      });
+      let modifiedEvent: typeof eventToModify | null = null;
+      if (eventToModify) {
+        // Shift the event by 2 hours
+        const originalStart = new Date(eventToModify.startDate);
+        const originalEnd = new Date(eventToModify.endDate);
+        const newStart = new Date(originalStart.getTime() + 2 * 60 * 60 * 1000);
+        const newEnd = new Date(originalEnd.getTime() + 2 * 60 * 60 * 1000);
+        modifiedEvent = {
+          ...eventToModify,
+          startDate: newStart.toISOString(),
+          endDate: newEnd.toISOString(),
+        };
+        logAction(`✏️ Rescheduling: "${eventToModify.title}" (+2 hours)`);
+      } else {
+        logAction(`✏️ No events to reschedule`);
+      }
+      await new Promise((r) => setTimeout(r, 800));
 
-      await new Promise((r) => setTimeout(r, 500));
-
-      // Step 3: Show preview
+      // Step 4: Remove an event
       setCurrentStep(4);
-      addActivity({
-        type: "changes_previewed",
-        agentName: "scheduler-demo",
-        description:
-          "Changes ready for review! Open Version Control panel to see them.",
+      if (eventToDelete) {
+        logAction(`🗑️ Removing: "${eventToDelete.title}"`);
+      } else {
+        logAction(`🗑️ No events to remove`);
+      }
+      await new Promise((r) => setTimeout(r, 800));
+
+      // Apply all changes in a single update to avoid stale state
+      setLocalEvents((prev) => {
+        let result = [...prev];
+
+        // Add new event
+        result.push(newEvent);
+
+        // Modify event (replace old with new)
+        if (modifiedEvent && eventToModify) {
+          result = result.map(e => e.id === eventToModify.id ? modifiedEvent! : e);
+        }
+
+        // Remove event
+        if (eventToDelete) {
+          result = result.filter(e => e.id !== eventToDelete.id);
+        }
+
+        return result;
       });
 
-      // Auto-preview if not already
+      // Step 5: Show preview for user approval
+      setCurrentStep(5);
+      logAction("✅ All changes ready for review");
+
+      // Start preview mode (shows phantom events on calendar)
       if (!isPreviewMode) {
         await startPreview("scheduler-demo");
       }
-    } catch (error) {
-      addActivity({
-        type: "tool_result",
-        description: `Demo failed: ${error}`,
-        status: "error",
-      });
-    } finally {
-      setIsRunning(false);
-      setCurrentStep(null);
-    }
-  };
 
-  // Demo: Multi-Agent Collaboration
-  const runMultiAgentDemo = async () => {
-    setIsRunning(true);
-    setCurrentStep(1);
-
-    try {
-      // Agent 1
-      addActivity({
-        type: "branch_created",
-        agentName: "Alice's Assistant",
-        description: "Creating sandbox for Alice's assistant...",
-      });
-      await createAgentSession("alice-scheduler", "claude");
+      // Keep panel open to show success
       await new Promise((r) => setTimeout(r, 500));
 
-      const aliceEvents = [
-        createDemoEvent("Alice: Client Call", 1, 10, 60, "blue"),
-        createDemoEvent("Alice: Team Sync", 2, 14, 30, "green"),
-      ];
-      setLocalEvents((prev) => [...prev, ...aliceEvents]);
-
-      addActivity({
-        type: "event_created",
-        agentName: "alice-scheduler",
-        description: "Created 2 meetings for Alice",
-        status: "success",
-      });
-
-      setCurrentStep(2);
-
-      // Switch back to main, then create second agent
-      await switchToMain();
-      await new Promise((r) => setTimeout(r, 300));
-
-      // Agent 2
-      addActivity({
-        type: "branch_created",
-        agentName: "Bob's Assistant",
-        description: "Creating sandbox for Bob's assistant...",
-      });
-      await createAgentSession("bob-scheduler", "gpt4");
-      await new Promise((r) => setTimeout(r, 500));
-
-      const bobEvents = [
-        createDemoEvent("Bob: Strategy Meeting", 1, 11, 90, "orange"),
-        createDemoEvent("Bob: 1:1 Review", 3, 15, 45, "purple"),
-      ];
-      setLocalEvents((prev) => [...prev, ...bobEvents]);
-
-      addActivity({
-        type: "event_created",
-        agentName: "bob-scheduler",
-        description: "Created 2 meetings for Bob",
-        status: "success",
-      });
-
-      setCurrentStep(3);
-
-      addActivity({
-        type: "changes_previewed",
-        description:
-          "Both agents have pending changes. Use Version Control to review and merge each!",
-      });
     } catch (error) {
-      addActivity({
-        type: "tool_result",
-        description: `Demo failed: ${error}`,
-        status: "error",
-      });
+      console.error("Demo failed:", error);
+      logAction("❌ Demo encountered an error");
     } finally {
       setIsRunning(false);
-      setCurrentStep(null);
     }
-  };
+  }, [createAgentSession, createDemoEvent, events, isPreviewMode, logAction, setLocalEvents, startPreview]);
+
+  // Expose method to parent
+  useImperativeHandle(ref, () => ({
+    openAndRunDemo: () => {
+      setIsOpen(true);
+      // Small delay to let the panel animate in
+      setTimeout(() => {
+        runSandboxDemo();
+      }, 300);
+    },
+  }), [runSandboxDemo]);
 
   // Reset demo state
   const resetDemo = () => {
     localStorage.removeItem("legit-agent-sessions");
     localStorage.removeItem("legit-commit-history");
+    localStorage.removeItem("webmcp-welcome-seen");
     window.location.reload();
   };
 
   if (!isOpen) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 z-50 gap-2 shadow-lg"
-      >
-        <Zap className="size-4 text-amber-500" />
-        Demo
-      </Button>
+      <div className="fixed bottom-6 right-6 z-50">
+        {/* Pulsing ring animation */}
+        {showPulse && (
+          <>
+            <span className="absolute inset-0 animate-ping rounded-full bg-primary opacity-75" />
+            <span className="absolute inset-0 animate-pulse rounded-full bg-primary opacity-50" />
+          </>
+        )}
+        <Button
+          size="lg"
+          onClick={() => setIsOpen(true)}
+          className={cn(
+            "relative gap-2 rounded-full px-6 py-6 text-base font-semibold shadow-xl",
+            "transition-all duration-300 hover:scale-105 hover:shadow-2xl"
+          )}
+        >
+          <Sparkles className="size-5" />
+          Try AI Demo
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-96 overflow-hidden rounded-lg border border-border bg-card shadow-xl">
+    <div className="fixed bottom-6 right-6 z-50 w-[380px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Zap className="size-5 text-amber-500" />
-          <div>
-            <h3 className="font-semibold">Legit + WebMCP Demo</h3>
-            <p className="text-xs text-muted-foreground">
-              Git-like versioning for AI agents
-            </p>
-          </div>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsOpen(false)}
-          className="size-8 p-0"
-        >
-          ×
-        </Button>
-      </div>
-
-      <ScrollArea className="max-h-[60vh]">
-        <div className="space-y-4 p-4">
-          {/* Info card */}
-          <div className="rounded-lg border border-border bg-muted/50 p-3">
-            <div className="flex items-start gap-2">
-              <Info className="mt-0.5 size-4 shrink-0 text-foreground" />
-              <div className="text-xs text-foreground">
-                <p className="font-medium">What this demo shows:</p>
-                <ul className="mt-1 list-inside list-disc space-y-0.5 text-muted-foreground">
-                  <li>AI agents work in isolated Git branches</li>
-                  <li>Human reviews changes before they apply</li>
-                  <li>Full history with rollback capability</li>
-                  <li>Multi-agent collaboration without conflicts</li>
-                </ul>
-              </div>
+      <div className="bg-primary px-5 py-4 text-primary-foreground">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary-foreground/20">
+              <Bot className="size-5" />
             </div>
-          </div>
-
-          {/* Active agents indicator */}
-          {activeSessions.length > 0 && (
-            <div className="rounded-lg bg-secondary p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-secondary-foreground">
-                <Users className="size-4" />
-                Active Agent Branches: {activeSessions.length}
-              </div>
-              <div className="space-y-1">
-                {activeSessions.map((session) => (
-                  <div
-                    key={session.agentId}
-                    className="flex items-center gap-2 text-xs"
-                  >
-                    <GitBranch className="size-3 text-foreground" />
-                    <span className="font-mono text-foreground">
-                      {session.agentId}
-                    </span>
-                    <span className="text-muted-foreground">({session.modelName})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Demo scenarios */}
-          <div className="space-y-3">
-            <p className="text-xs font-medium uppercase text-muted-foreground">
-              Interactive Demos
-            </p>
-
-            {/* Demo 1: Sandbox Workflow */}
-            <div className="rounded-lg border border-border p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Bot className="size-4 text-foreground" />
-                  <span className="font-medium text-sm">Sandbox Workflow</span>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={runSandboxDemo}
-                  disabled={isRunning}
-                  className="h-7 gap-1 px-2 text-xs"
-                >
-                  {isRunning && currentStep ? (
-                    <>
-                      <Play className="size-3 animate-pulse" />
-                      Step {currentStep}/4
-                    </>
-                  ) : (
-                    <>
-                      <Play className="size-3" />
-                      Run
-                    </>
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Shows: Agent creates sandbox → makes changes → human reviews →
-                merges to main
-              </p>
-              {currentStep && currentStep <= 4 && (
-                <div className="mt-2 space-y-1">
-                  <Step
-                    num={1}
-                    text="Create sandbox branch"
-                    active={currentStep === 1}
-                    done={currentStep > 1}
-                  />
-                  <Step
-                    num={2}
-                    text="Agent schedules meetings"
-                    active={currentStep === 2}
-                    done={currentStep > 2}
-                  />
-                  <Step
-                    num={3}
-                    text="Changes saved to branch"
-                    active={currentStep === 3}
-                    done={currentStep > 3}
-                  />
-                  <Step
-                    num={4}
-                    text="Preview for human review"
-                    active={currentStep === 4}
-                    done={false}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Demo 2: Multi-Agent */}
-            <div className="rounded-lg border border-border p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Users className="size-4 text-foreground" />
-                  <span className="font-medium text-sm">Multi-Agent</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={runMultiAgentDemo}
-                  disabled={isRunning}
-                  className="h-7 gap-1 px-2 text-xs"
-                >
-                  <Play className="size-3" />
-                  Run
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Shows: Two agents work independently on separate branches
+            <div>
+              <h3 className="font-bold">AI Calendar Assistant</h3>
+              <p className="text-xs text-primary-foreground/80">
+                Watch AI manage your schedule
               </p>
             </div>
           </div>
-
-          {/* Instructions */}
-          <div className="rounded-lg bg-muted p-3">
-            <p className="mb-2 text-xs font-medium text-foreground">
-              After running a demo:
-            </p>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <GitBranch className="size-3" />
-                <span>Use the branch switcher to navigate</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Eye className="size-3" />
-                <span>Preview changes with diff viewer</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <GitMerge className="size-3" />
-                <span>Merge approved changes to main</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Reset */}
           <Button
             variant="ghost"
             size="sm"
-            onClick={resetDemo}
-            className="w-full justify-start gap-2 text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950"
+            onClick={() => setIsOpen(false)}
+            className="size-8 rounded-full p-0 text-primary-foreground/80 hover:bg-primary-foreground/20 hover:text-primary-foreground"
           >
-            <RotateCcw className="size-4" />
-            Reset Demo (Clear All Branches)
+            <X className="size-4" />
           </Button>
         </div>
-      </ScrollArea>
+      </div>
 
-      {/* Footer */}
-      <div className="border-t border-border bg-muted/50 px-4 py-2">
-        <p className="text-center text-[10px] text-muted-foreground">
-          Powered by Legit SDK + WebMCP
-        </p>
+      <div className="p-5">
+        {/* Main demo card - show when not running */}
+        {!isRunning && !currentStep && (
+          <div className="mb-4 rounded-lg border border-border bg-secondary p-4">
+            <div className="mb-4 text-center">
+              <h4 className="font-semibold text-foreground">
+                See AI in Action
+              </h4>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Watch AI propose meetings, then approve or reject
+              </p>
+            </div>
+
+            {/* What the demo will show */}
+            <div className="mb-4 space-y-1.5 text-xs text-muted-foreground">
+              <p className="flex items-center gap-2"><span className="text-green-500">+</span> Add a new meeting</p>
+              <p className="flex items-center gap-2"><span className="text-amber-500">~</span> Reschedule an existing event</p>
+              <p className="flex items-center gap-2"><span className="text-red-500">−</span> Remove a cancelled meeting</p>
+            </div>
+
+            <Button
+              size="lg"
+              onClick={runSandboxDemo}
+              disabled={isRunning}
+              className="w-full gap-2 py-5 text-base font-semibold"
+            >
+              <Play className="size-5" />
+              Start Demo
+            </Button>
+          </div>
+        )}
+
+        {/* Progress steps - show when running */}
+        {(isRunning || currentStep) && (
+          <div className="mb-4 space-y-1 rounded-lg bg-muted p-4">
+            {DEMO_STEPS.map((step, index) => (
+              <EnhancedStep
+                key={index}
+                step={step}
+                stepNum={index + 1}
+                active={currentStep === index + 1}
+                done={currentStep !== null && currentStep > index + 1}
+                hidden={currentStep !== null && currentStep < index + 1}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Live action log */}
+        {actionLog.length > 0 && (
+          <div className="mb-4 rounded-lg border border-border bg-secondary/50 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="size-2 animate-pulse rounded-full bg-green-500" />
+              <span className="text-xs font-medium text-muted-foreground">Activity Log</span>
+            </div>
+            <div className="max-h-32 space-y-1 overflow-y-auto">
+              {actionLog.map((log, index) => (
+                <div
+                  key={index}
+                  className={cn(
+                    "text-xs text-foreground transition-all duration-300",
+                    index === actionLog.length - 1 && "font-medium"
+                  )}
+                >
+                  {log}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Value prop reminder - show when not running */}
+        {!isRunning && !currentStep && (
+          <div className="mb-4 rounded-lg bg-accent p-3">
+            <p className="text-center text-xs font-medium text-accent-foreground">
+              No changes are made until you approve them
+            </p>
+          </div>
+        )}
+
+        {/* Reset link */}
+        <button
+          onClick={resetDemo}
+          className="flex w-full items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <RotateCcw className="size-3" />
+          Reset demo
+        </button>
       </div>
     </div>
   );
-}
+});
 
-function Step({
-  num,
-  text,
+function EnhancedStep({
+  step,
+  stepNum,
   active,
   done,
+  hidden,
 }: {
-  num: number;
-  text: string;
+  step: StepConfig;
+  stepNum: number;
   active: boolean;
   done: boolean;
+  hidden: boolean;
 }) {
+  const Icon = step.icon;
+
+  if (hidden) {
+    return (
+      <div className="flex items-center gap-3 py-1.5 opacity-30 transition-all duration-300">
+        <div className="flex size-7 items-center justify-center rounded-full bg-secondary">
+          <span className="text-xs text-secondary-foreground">{stepNum}</span>
+        </div>
+        <span className="text-sm text-muted-foreground">{step.title}</span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-xs",
-        active && "text-foreground font-medium",
-        done && "text-green-600",
-        !active && !done && "text-muted-foreground"
+        "flex items-start gap-3 py-2 transition-all duration-300",
+        active && "text-foreground",
+        done && "text-foreground opacity-60"
       )}
     >
       {done ? (
-        <CheckCircle2 className="size-3" />
+        <div className="flex size-7 items-center justify-center rounded-full bg-primary/20">
+          <CheckCircle2 className="size-4 text-primary" />
+        </div>
       ) : (
-        <span
+        <div
           className={cn(
-            "flex size-4 items-center justify-center rounded-full text-[10px]",
-            active
-              ? "bg-secondary text-secondary-foreground"
-              : "bg-muted text-muted-foreground"
+            "flex size-7 items-center justify-center rounded-full transition-all",
+            active ? "bg-primary/20" : "bg-secondary"
           )}
         >
-          {num}
-        </span>
+          <Icon className={cn("size-4", active ? step.iconColor : "text-muted-foreground")} />
+        </div>
       )}
-      <span>{text}</span>
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <span className={cn("text-sm", active && "font-semibold")}>{step.title}</span>
+          {active && (
+            <div className="size-2 animate-pulse rounded-full bg-primary" />
+          )}
+        </div>
+        {active && (
+          <p className="mt-0.5 text-xs text-muted-foreground">{step.description}</p>
+        )}
+      </div>
     </div>
   );
 }

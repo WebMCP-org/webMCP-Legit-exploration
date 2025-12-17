@@ -26,6 +26,8 @@ export interface PendingChanges {
 interface AgentPreviewState {
   /** Whether preview mode is active */
   isPreviewMode: boolean;
+  /** Whether the review panel is open (separate from preview mode) */
+  isReviewPanelOpen: boolean;
   /** ID of the agent being previewed */
   previewAgentId: string | null;
   /** Branch name of the agent being previewed */
@@ -46,6 +48,10 @@ interface AgentPreviewActions {
   startPreview: (agentId: string) => Promise<PendingChanges>;
   /** Stop previewing and return to main branch view */
   stopPreview: () => void;
+  /** Open the review panel */
+  openReviewPanel: () => void;
+  /** Close the review panel */
+  closeReviewPanel: () => void;
   /** Accept all pending changes (merge to main) */
   acceptAllChanges: () => Promise<void>;
   /** Reject all pending changes (discard agent branch) */
@@ -75,6 +81,7 @@ export function AgentPreviewProvider({ children }: AgentPreviewProviderProps) {
 
   const [state, setState] = useState<AgentPreviewState>({
     isPreviewMode: false,
+    isReviewPanelOpen: false,
     previewAgentId: null,
     previewBranch: null,
     pendingChanges: { added: [], modified: [], removed: [] },
@@ -208,6 +215,7 @@ export function AgentPreviewProvider({ children }: AgentPreviewProviderProps) {
 
         setState({
           isPreviewMode: true,
+          isReviewPanelOpen: false,
           previewAgentId: agentId,
           previewBranch: agentBranch,
           pendingChanges,
@@ -236,12 +244,27 @@ export function AgentPreviewProvider({ children }: AgentPreviewProviderProps) {
   const stopPreview = useCallback(() => {
     setState({
       isPreviewMode: false,
+      isReviewPanelOpen: false,
       previewAgentId: null,
       previewBranch: null,
       pendingChanges: { added: [], modified: [], removed: [] },
       loading: false,
       error: null,
     });
+  }, []);
+
+  /**
+   * Open the review panel
+   */
+  const openReviewPanel = useCallback(() => {
+    setState((prev) => ({ ...prev, isReviewPanelOpen: true }));
+  }, []);
+
+  /**
+   * Close the review panel
+   */
+  const closeReviewPanel = useCallback(() => {
+    setState((prev) => ({ ...prev, isReviewPanelOpen: false }));
   }, []);
 
   /**
@@ -430,6 +453,8 @@ export function AgentPreviewProvider({ children }: AgentPreviewProviderProps) {
       ...state,
       startPreview,
       stopPreview,
+      openReviewPanel,
+      closeReviewPanel,
       acceptAllChanges,
       rejectAllChanges,
       acceptChange,
@@ -440,6 +465,8 @@ export function AgentPreviewProvider({ children }: AgentPreviewProviderProps) {
       state,
       startPreview,
       stopPreview,
+      openReviewPanel,
+      closeReviewPanel,
       acceptAllChanges,
       rejectAllChanges,
       acceptChange,

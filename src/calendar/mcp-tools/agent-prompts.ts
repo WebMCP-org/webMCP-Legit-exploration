@@ -534,4 +534,136 @@ This is useful for:
       ],
     }),
   });
+
+  // ---------------------------------------------------------------------------
+  // Prompt: Run Demo - Execute Full Workflow
+  // ---------------------------------------------------------------------------
+  useWebMCPPrompt({
+    name: "legit_run_demo",
+    description: `Execute the full WebMCP-Legit demo workflow automatically.
+
+This prompt instructs you to:
+1. Start a sandbox (isolated branch)
+2. Create new events (including some that conflict with existing events)
+3. Modify an existing event (reschedule it)
+4. Delete an existing event
+5. Show the preview for user approval (PR-style review)
+
+Use this prompt to demonstrate the complete AI calendar assistant flow.`,
+    get: async () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: `# Execute Demo Workflow
+
+**IMPORTANT: Execute these steps in order. Call the tools, don't just describe them.**
+
+## Step 1: Start Your Sandbox
+Call \`calendar_start_sandbox\` with:
+- agentId: "demo-assistant"
+
+This creates your isolated branch for making changes.
+
+## Step 2: Get Current Calendar State
+Call \`calendar_get_state\` to see existing events.
+Note which events exist - you'll modify one and delete another.
+
+## Step 3: Create New Events (Including Conflicts)
+Call \`calendar_schedule_meeting\` multiple times to create:
+
+**Event 1 - Morning Standup:**
+- title: "Team Standup"
+- date: tomorrow's date (YYYY-MM-DD format)
+- startTime: "09:00"
+- durationMinutes: 30
+- color: "blue"
+- description: "Daily sync with the team"
+
+**Event 2 - Conflict Meeting (overlap with existing if possible):**
+- title: "Product Review"
+- date: tomorrow's date
+- startTime: Pick a time that overlaps with an existing event from Step 2
+- durationMinutes: 60
+- color: "purple"
+- description: "AI-scheduled meeting - may conflict with existing event"
+
+**Event 3 - Afternoon Focus Time:**
+- title: "Deep Work Block"
+- date: tomorrow's date
+- startTime: "14:00"
+- durationMinutes: 120
+- color: "green"
+- description: "Protected focus time"
+
+## Step 4: Modify an Existing Event
+If there are existing events from Step 2, call \`calendar_update_event\` to reschedule one:
+- eventId: Pick an existing event's ID
+- title: Add "(Rescheduled)" to the original title
+
+## Step 5: Delete an Existing Event
+If there are at least 2 existing events, call \`calendar_delete_event\` to remove one:
+- eventId: Pick a different existing event's ID
+
+## Step 6: Show Preview for User Approval
+Call \`calendar_show_preview\` with:
+- agentId: "demo-assistant"
+
+This displays phantom events on the calendar showing:
+- ✅ Green glow: New events being added
+- 🟡 Amber glow: Modified events
+- 🔴 Red glow: Events being removed
+
+The user can then review and approve/reject your proposed changes.
+
+---
+
+**NOW EXECUTE THESE STEPS.** Start with Step 1.`,
+          },
+        },
+      ],
+    }),
+  });
+
+  // ---------------------------------------------------------------------------
+  // Prompt: Quick Demo - Minimal Workflow
+  // ---------------------------------------------------------------------------
+  useWebMCPPrompt({
+    name: "legit_quick_demo",
+    description: `Run a quick demo showing the core sandbox → change → preview flow.
+
+Simpler than legit_run_demo - just creates one event and shows preview.
+Good for a fast demonstration of the key concepts.`,
+    get: async () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: `# Quick Demo - Execute Now
+
+**Execute these tool calls in order:**
+
+## 1. Start Sandbox
+\`calendar_start_sandbox\` with agentId: "quick-demo"
+
+## 2. Create One Meeting
+\`calendar_schedule_meeting\` with:
+- title: "AI Scheduled Meeting"
+- date: tomorrow (YYYY-MM-DD format)
+- startTime: "10:00"
+- durationMinutes: 60
+- color: "blue"
+- description: "Meeting scheduled by AI assistant"
+
+## 3. Show Preview
+\`calendar_show_preview\` with agentId: "quick-demo"
+
+**Start now with Step 1.**`,
+          },
+        },
+      ],
+    }),
+  });
 }
